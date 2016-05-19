@@ -1,0 +1,86 @@
+#!/usr/bin/python
+# -*- coding: utf-8 -*-
+
+import mechanize
+from calibre.web.feeds.news import BasicNewsRecipe
+
+class AdvancedUserRecipeOReillyGitPocketGuide(BasicNewsRecipe):
+  """
+    Recipe for download Git Pocket Guide
+    http://chimera.labs.oreilly.com/books/1230000000561/index.html
+  """
+  title = u'Git Pocket Guide'
+  INDEX = 'http://chimera.labs.oreilly.com/books/1230000000561/index.html'
+  INDEX_PATH = 'http://chimera.labs.oreilly.com/books/1230000000561/'
+  
+  __author__ = u'Richard E. Silverman'
+  __version__ = '1.0'
+  language = 'zh-CN'
+  pubisher = u'O\'Reilly'
+  description = u''
+  category = 'Computer, English'
+  remove_javascript = True
+  use_embedded_content = False
+  no_stylesheets = True
+  encoding = 'UTF-8'
+  conversion_options = {'linearize_tables':True}
+  keep_only_tags = [
+    dict(name='header'),
+    dict(name='section', attrs={'id':['preface']}),
+    dict(name='section', attrs={'class':['chapter']})
+  ]
+
+  _cachedBrowser = None
+  def get_browser(self):
+    """
+      The images on this site requires Referer to download,
+      otherwise it gets 403 Forbidden error.
+      So it has to append HTTP Referer HEAD in its request
+    """
+    if self._cachedBrowser is None:
+      br = BasicNewsRecipe.get_browser(self)
+      orig_open_novisit = br.open_novisit
+      def my_open_no_visit(url, **kwargs):
+        req = mechanize.Request( url, headers = { 'Referer': self.INDEX_PATH, })
+        return orig_open_novisit(req)
+      br.open_novisit = my_open_no_visit
+      #br.set_debug_http(True)
+      self._cachedBrowser = br
+    return br
+
+  def clone_browser(self, br):
+    if self._cachedBrowser is None:
+      raise Exception("No browser")
+    br = BasicNewsRecipe.clone_browser(self, br)
+    br.open_novisit = self._cachedBrowser.open_novisit
+    return br
+  
+  def parse_index(self):
+    articles = []
+    feeds = []
+
+    soup = self.index_to_soup(self.INDEX)
+    feed_title = self.tag_to_string(soup.find('title'))
+    self.log.debug("Feed Title: " + feed_title)
+    
+    for table in soup.findAll('div', attrs={'class':'toc'}):
+      # Main articles
+      for post in table.findAll('span'):
+        a = post.find('a', href=True)
+        title = self.tag_to_string(post)
+        if a:
+          url = a['href']
+          if url is not None and "#" not in url:
+            self.log.debug("Article title and url: ")
+            self.log.debug(title + ": " + url)
+            url = self.INDEX_PATH + url
+            articles.append((
+              {'title':title,
+               'url':url,
+               'description':'',
+               'date':''}))
+    if articles:
+      feeds.append((feed_title, articles))
+    return feeds
+
+
